@@ -739,6 +739,19 @@ class VSphereCheck(AgentCheck):
         mor['metrics'] = self._compute_needed_metrics(instance, available_metrics)
         mor_name = str(mor['mor'])
 
+        # DEBUG: write metrics to a file
+        try:
+            file_path = u"/tmp/vsphere_{}".format(mor_name)
+            with open(file_path, 'w') as f:
+                for metric in mor['metrics']:
+                    metric_name = \
+                        self.metrics_metadata[i_key].get(metric.counterId, {}).get('name', "UNKNOWN")
+                    f.write(
+                        u"{}\n".format(metric_name)
+                    )
+        except Exception:
+            self.log.exception(u"Oops!")
+
         if mor_name in self.morlist[i_key]:
             # Was already here last iteration
             self.morlist[i_key][mor_name]['metrics'] = mor['metrics']
