@@ -1,6 +1,7 @@
 # stdlib
 import re
 import time
+import urllib
 
 # 3p
 import pymongo
@@ -533,6 +534,26 @@ class MongoDb(AgentCheck):
             metric_prefix=metric_prefix, metric_suffix=metric_suffix
         )
 
+    def _authenticate(self, database, username, password, ssl_params):
+        """
+        Authenticate to the database.
+        """
+        # X.509 authentication
+        try:
+            if ssl_params:
+                self.log.debug(
+                    u"Authenticate `%s`  to `%s` using `MONGODB-X509` mechanism",
+                    username, database
+                )
+                return database.authenticate(username, mechanism='MONGODB-X509')
+
+            return database.authenticate(username, password)
+        except pymongo.errors.PyMongoError as e:
+            self.log.error(
+                u"Authentication failed due to invalid credentials or configuration issues. %s", e
+            )
+            return False
+
     def check(self, instance):
         """
         Returns a dictionary that looks a lot like what's sent back by
@@ -555,8 +576,7 @@ class MongoDb(AgentCheck):
         if 'server' not in instance:
             raise Exception("Missing 'server' in mongo config")
 
-        server = instance['server']
-
+        # x.509 authentication
         ssl_params = {
             'ssl': instance.get('ssl', None),
             'ssl_keyfile': instance.get('ssl_keyfile', None),
@@ -570,16 +590,18 @@ class MongoDb(AgentCheck):
                 del ssl_params[key]
 
         # Configuration a URL, mongodb://user:pass@server/db
+        server = instance['server']
         parsed = pymongo.uri_parser.parse_uri(server)
         username = parsed.get('username')
         password = parsed.get('password')
         db_name = parsed.get('database')
-        clean_server_name = server.replace(password, "*" * 5) if password is not None else server
-
         additional_metrics = instance.get('additional_metrics', [])
 
-        tags = instance.get('tags', [])
-        tags.append('server:%s' % clean_server_name)
+        clean_server_name = server.replace(password, "*" * 5) if password else server
+
+        if ssl_params:
+            username_uri = u"{}@".format(urllib.quote(username))
+            clean_server_name = server.replace(username_uri, "")
 
         # Get the list of metrics to collect
         collect_tcmalloc_metrics = 'tcmalloc' in additional_metrics
@@ -588,7 +610,10 @@ class MongoDb(AgentCheck):
             additional_metrics
         )
 
-        # de-dupe tags to avoid a memory leak
+        # Tagging
+        tags = instance.get('tags', [])
+        tags.append('server:%s' % clean_server_name)
+        # ...de-dupe tags to avoid a memory leak
         tags = list(set(tags))
 
         if not db_name:
@@ -608,11 +633,6 @@ class MongoDb(AgentCheck):
                 "port:%s" % port
             ]
 
-        do_auth = True
-        if username is None or password is None:
-            self.log.debug("Mongo: cannot extract username and password from config %s" % server)
-            do_auth = False
-
         timeout = float(instance.get('timeout', DEFAULT_TIMEOUT)) * 1000
         try:
             cli = pymongo.mongo_client.MongoClient(
@@ -630,8 +650,16 @@ class MongoDb(AgentCheck):
                 tags=service_check_tags)
             raise
 
-        if do_auth and not db.authenticate(username, password):
-            message = "Mongo: cannot connect with config %s" % server
+        # Authenticate
+        do_auth = True
+        if username is None or password is None:
+            self.log.debug(
+                u"Cannot extract username and password from `%s`", server
+            )
+            do_auth = False
+
+        if do_auth and not self._authenticate(db, username, password, ssl_params):
+            message = u"Mongo: cannot connect with config %s" % server
             self.service_check(
                 self.SERVICE_CHECK_NAME,
                 AgentCheck.CRITICAL,
@@ -674,7 +702,7 @@ class MongoDb(AgentCheck):
                     **ssl_params)
                 db = cli[db_name]
 
-                if do_auth and not db.authenticate(username, password):
+                if do_auth and not self._authenticate(db, username, password, ssl_params):
                     message = ("Mongo: cannot connect with config %s" % server)
                     self.service_check(
                         self.SERVICE_CHECK_NAME,
