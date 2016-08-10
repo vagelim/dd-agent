@@ -258,13 +258,20 @@ class HTTPCheck(NetworkCheck):
         if response_time and not service_checks:
             # Stop the timer as early as possible
             running_time = time.time() - start
-            # Store tags in a temporary set so that we don't modify the global tags data structure
-            try:
-                tags_set = set(tags)
-            except Exception, e:
-                self.log.error('Exception: %s. Tags for %s are not formatted correctly' % (e,addr))
-            url_tag = 'url:%s' % addr
-            tags_set = tags_set.union([url_tag])
+            # Store tags in a temporary list so that we don't modify the global tags data structure
+            tags_list = list(tags)
+
+            # Check for ill-formatted tags that aren't string types and log an error
+            bad_tags = []
+            for tag in tags_list:
+                if type(tag) is not str:
+                    bad_tags.append(tag)
+
+            if bad_tags:
+                self.log.error('Tags not formatted correctly for %s. %s not of type string'
+                               % (addr,str(bad_tags)))
+
+            tags_list.append('url:%s' % addr)
             self.gauge('network.http.response_time', running_time, tags=tags_set)
 
         # Check HTTP response status code
