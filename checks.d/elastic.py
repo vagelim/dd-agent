@@ -330,10 +330,10 @@ class ESCheck(AgentCheck):
         stats_data = self._get_data(stats_url, config)
         if stats_data['cluster_name']:
             # retreive the cluster name from the data, and append it to the
-            # master tag list.	
+            # master tag list.
             config.tags.append("cluster_name:{}".format(stats_data['cluster_name']))
         self._process_stats_data(nodes_url, stats_data, stats_metrics, config)
-        
+
         # Load clusterwise data
         if config.pshard_stats:
             pshard_stats_url = urlparse.urljoin(config.url, pshard_stats_url)
