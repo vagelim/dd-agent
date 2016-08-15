@@ -328,8 +328,12 @@ class ESCheck(AgentCheck):
 
         stats_url = urlparse.urljoin(config.url, stats_url)
         stats_data = self._get_data(stats_url, config)
+        if stats_data['cluster_name']:
+            # retreive the cluster name from the data, and append it to the
+            # master tag list.	
+            config.tags.append("cluster_name:{}".format(stats_data['cluster_name']))
         self._process_stats_data(nodes_url, stats_data, stats_metrics, config)
-
+        
         # Load clusterwise data
         if config.pshard_stats:
             pshard_stats_url = urlparse.urljoin(config.url, pshard_stats_url)
@@ -508,9 +512,6 @@ class ESCheck(AgentCheck):
             self._process_metric(node_data, metric, *desc, tags=config.tags)
 
     def _process_stats_data(self, nodes_url, data, stats_metrics, config):
-        # retreive the cluster name from the data, and append it to the
-        # master tag list.	
-        config.tags.append("cluster_name:{}".format(data['cluster_name']))
         cluster_stats = config.cluster_stats
         for node_data in data['nodes'].itervalues():
             metric_hostname = None
