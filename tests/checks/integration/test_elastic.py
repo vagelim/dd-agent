@@ -244,7 +244,7 @@ class TestElastic(AgentCheckTest):
             "api_key": "bar"
         }
 
-        tags = [u"foo:bar", u"baz"]
+        tags = [u"foo:bar", u"baz", u"cluster_name:elasticsearch"]
         url = 'http://localhost:{0}'.format(port)
         bad_url = 'http://localhost:{0}'.format(bad_port)
 
