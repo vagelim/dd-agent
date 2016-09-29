@@ -23,8 +23,8 @@ import traceback
 from urlparse import urlparse
 
 # project
-from util import check_yaml, get_os
-from utils.platform import Platform
+from util import check_yaml
+from utils.platform import Platform, get_os
 from utils.proxy import get_proxy
 from utils.service_discovery.config import extract_agent_config
 from utils.service_discovery.config_stores import CONFIG_FROM_FILE, TRACE_CONFIG
@@ -35,7 +35,7 @@ from utils.subprocess_output import (
 )
 
 # CONSTANTS
-AGENT_VERSION = "5.9.0"
+AGENT_VERSION = "5.10.0"
 DATADOG_CONF = "datadog.conf"
 UNIX_CONFIG_PATH = '/etc/dd-agent'
 MAC_CONFIG_PATH = '/opt/datadog-agent/etc'
@@ -274,7 +274,7 @@ def get_histogram_aggregates(configstr=None):
 
     try:
         vals = configstr.split(',')
-        valid_values = ['min', 'max', 'median', 'avg', 'count']
+        valid_values = ['min', 'max', 'median', 'avg', 'sum', 'count']
         result = []
 
         for val in vals:
@@ -323,6 +323,10 @@ def clean_dd_url(url):
     if not url.startswith('http'):
         url = 'https://' + url
     return url[:-1] if url.endswith('/') else url
+
+
+def remove_empty(string_array):
+    return filter(lambda x: x, string_array)
 
 
 def get_config(parse_args=True, cfg_path=None, options=None):
@@ -398,8 +402,11 @@ def get_config(parse_args=True, cfg_path=None, options=None):
         #    'https://app.example.com': ['api_key_xyz']
         # }
         endpoints = {}
+        dd_urls = remove_empty(dd_urls)
+        api_keys = remove_empty(api_keys)
         if len(dd_urls) == 1:
-            endpoints[dd_urls[0]] = api_keys
+            if len(api_keys) > 0:
+                endpoints[dd_urls[0]] = api_keys
         else:
             assert len(dd_urls) == len(api_keys), 'Please provide one api_key for each url'
             for i, dd_url in enumerate(dd_urls):
